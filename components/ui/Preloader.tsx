@@ -5,7 +5,6 @@ import { useProgress } from "@react-three/drei";
 import { useLenis } from "lenis/react";
 import { gsap, DrawSVGPlugin, useGSAP } from "@/lib/gsap";
 import { useUI } from "@/lib/flight-state";
-import { getAudio } from "@/lib/audio";
 import { SplitFlap } from "./SplitFlap";
 import { CONCORDE_PLANFORM } from "./ConcordeSilhouette";
 
@@ -26,8 +25,6 @@ export function Preloader() {
   const { progress, active } = useProgress();
   const lenis = useLenis();
   const setReady = useUI((s) => s.setReady);
-  const audioIntent = useUI((s) => s.audioEnabled);
-  const setAudioRunning = useUI((s) => s.setAudioRunning);
   const setLaunched = useUI((s) => s.setLaunched);
   const root = useRef<HTMLDivElement>(null);
   const feet = useRef<HTMLSpanElement>(null);
@@ -36,8 +33,6 @@ export function Preloader() {
   const plan = useRef<SVGSVGElement>(null);
   const [boardIdx, setBoardIdx] = useState(0);
   const [done, setDone] = useState(false);
-  /** Loaded and waiting for the tap that both enters the site and unlocks the audio. */
-  const [armed, setArmed] = useState(false);
   const started = useRef<number>(0);
   const shown = useRef({ v: 0 });
   const peak = useRef(0);
@@ -105,48 +100,15 @@ export function Preloader() {
     return () => gsap.ticker.remove(tick);
   }, [render]);
 
-  /**
-   * Entering the site is the gesture that starts the sound. A browser will not let an
-   * AudioContext run until the page has had real user input — verified: before any input Chrome
-   * reports the context "suspended" and `userActivation.hasBeenActive` false. So when sound is
-   * wanted and the browser has not already allowed it, the loader waits for one tap, and that tap
-   * both unlocks the audio and opens the page. If the engine is already running (a browser that
-   * permits it, or a return visit where Chrome remembers the origin) nothing is asked for and the
-   * loader hands off on its own, exactly as before.
-   */
-  const board = useCallback(() => {
-    // enable() must be called inside the event's own task so the user activation still counts.
-    void getAudio()
-      .enable()
-      .then(() => setAudioRunning(true), () => {});
-    setArmed(false);
-    setDone(true);
-  }, [setAudioRunning]);
-
-  // Decide when to hand off: assets loaded (or timeout) AND minimum dwell.
+  // Decide when to hand off: assets loaded (or timeout) AND minimum dwell. The loader never waits
+  // for input; audio is unlocked by AudioDirector on the first gesture after hand-off.
   useEffect(() => {
     const loaded = progress >= 100 && !active;
     const elapsed = performance.now() - started.current;
     const wait = Math.max(0, MIN_MS - elapsed);
-    const t = window.setTimeout(() => {
-      if (audioIntent && !getAudio().isEnabled()) setArmed(true);
-      else setDone(true);
-    }, loaded ? wait : Math.max(wait, MAX_MS - elapsed));
+    const t = window.setTimeout(() => setDone(true), loaded ? wait : Math.max(wait, MAX_MS - elapsed));
     return () => window.clearTimeout(t);
-  }, [progress, active, audioIntent]);
-
-  // Any input anywhere counts, and the loader never becomes a dead end.
-  useEffect(() => {
-    if (!armed) return;
-    const go = () => board();
-    const events = ["pointerdown", "keydown", "touchstart"] as const;
-    events.forEach((e) => window.addEventListener(e, go, { capture: true, once: true }));
-    const bail = window.setTimeout(() => setDone(true), 20000);
-    return () => {
-      events.forEach((e) => window.removeEventListener(e, go, true));
-      window.clearTimeout(bail);
-    };
-  }, [armed, board]);
+  }, [progress, active]);
 
   useGSAP(
     () => {
@@ -206,15 +168,6 @@ export function Preloader() {
         color: "#0e1b2b",
       }}
     >
-      {armed && (
-        <button
-          type="button"
-          autoFocus
-          onClick={board}
-          aria-label="Board — enter the site with sound"
-          className="absolute inset-0 z-10 cursor-pointer focus:outline-none"
-        />
-      )}
       <div className="pre-inner flex h-full flex-col justify-between p-[var(--gutter)]">
         {/* Header strip */}
         <div className="flex items-start justify-between gap-6">
@@ -266,23 +219,8 @@ export function Preloader() {
             </p>
           </div>
           <div className="mb-4 w-[min(38vw,420px)]">
-            <p
-              data-board={armed}
-              className="mono mb-3 text-right text-[0.6rem] tracking-[0.22em] text-[#0e1b2b]/55 uppercase data-[board=true]:text-[#0e1b2b]"
-            >
-              {armed ? (
-                <span className="inline-flex items-center gap-2 rounded-full border border-[#0e1b2b]/30 px-3 py-1.5">
-                  <span className="relative inline-flex h-1.5 w-1.5">
-                    <span className="absolute inset-0 animate-ping rounded-full bg-[#c2410c] opacity-70" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#c2410c]" />
-                  </span>
-                  {/* Wording by pointer type, in CSS — no state, nothing to hydrate. */}
-                  <span className="[@media(pointer:fine)]:hidden">Tap to board</span>
-                  <span className="[@media(pointer:coarse)]:hidden">Click to board</span>
-                </span>
-              ) : (
-                "Climbing to cruise"
-              )}
+            <p className="mono mb-3 text-right text-[0.6rem] tracking-[0.22em] text-[#0e1b2b]/55 uppercase">
+              Climbing to cruise
             </p>
             <div className="h-px w-full bg-[#0e1b2b]/15">
               <div ref={bar} className="h-full w-full origin-left bg-[#0e1b2b]" style={{ transform: "scaleX(0)" }} />
