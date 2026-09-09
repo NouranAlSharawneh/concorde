@@ -119,11 +119,14 @@ export function Cursor() {
   if (!fine) return null;
 
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-[100] mix-blend-difference">
-      <div ref={dot} className="absolute left-0 top-0 rounded-full bg-white opacity-0" style={{ width: DOT, height: DOT }} />
+    // The blend sits on the dot and the ring themselves. A full-viewport blending wrapper made the
+    // compositor flatten everything beneath it — all three WebGL canvases included — on every frame,
+    // to invert two elements a few pixels wide.
+    <div aria-hidden className="pointer-events-none contents">
+      <div ref={dot} className="fixed left-0 top-0 z-[100] rounded-full bg-white opacity-0 mix-blend-difference" style={{ width: DOT, height: DOT }} />
       <div
         ref={ring}
-        className="absolute left-0 top-0 flex items-center justify-center rounded-full border border-white opacity-0"
+        className="fixed left-0 top-0 z-[100] flex items-center justify-center rounded-full border border-white opacity-0 mix-blend-difference"
         style={{ width: RING, height: RING }}
       >
         <span ref={label} className="mono text-[0.5625rem] uppercase tracking-[0.22em] text-white opacity-0">

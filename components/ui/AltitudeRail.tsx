@@ -18,7 +18,7 @@ const CHAPTERS: ReadonlyArray<{ id: ChapterId; label: string }> = [
   { id: "descent", label: "Descent" },
   { id: "legacy", label: "Legacy" },
   { id: "timeline", label: "Timeline" },
-  { id: "footer", label: "Boarding" },
+  { id: "footer", label: "End of flight" },
 ];
 
 const EVEN = CHAPTERS.map((_, i) => i / (CHAPTERS.length - 1));

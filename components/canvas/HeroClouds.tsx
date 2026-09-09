@@ -7,6 +7,9 @@ import { useFrame } from "@react-three/fiber";
 import { flight } from "@/lib/flight-state";
 import type { DeviceTier } from "@/lib/device";
 
+/** drei fetches its default cloud sprite from a third-party CDN at runtime, on the preloader's critical path. Self-hosted instead. */
+const CLOUD_TEXTURE = "/textures/cloud.png";
+
 interface Props {
   tier: DeviceTier;
 }
@@ -17,7 +20,7 @@ interface Props {
  */
 export function HeroClouds({ tier }: Props) {
   const group = useRef<THREE.Group>(null);
-  const segments = tier === "high" ? 12 : tier === "mid" ? 8 : 5;
+  const segments = tier === "high" ? 9 : tier === "mid" ? 7 : 5;
   const targetQ = useMemo(() => new THREE.Quaternion(), []);
   const fade = useRef(0);
 
@@ -40,7 +43,7 @@ export function HeroClouds({ tier }: Props) {
   // Camera space: -z forward. At ~48 units with a 36° lens the frame corners sit near (±25, ±15.5).
   return (
     <group ref={group}>
-      <Clouds material={THREE.MeshBasicMaterial} limit={200} range={200}>
+      <Clouds material={THREE.MeshBasicMaterial} limit={200} range={200} texture={CLOUD_TEXTURE}>
         <Cloud seed={5} segments={segments} bounds={[36, 9, 24]} volume={38} color="#ffffff" opacity={0.85} speed={0.12} fade={60} position={[-30, -19, -50]} growth={9} concentrate="outside" />
         <Cloud seed={9} segments={segments} bounds={[40, 10, 26]} volume={40} color="#fbfdff" opacity={0.8} speed={0.1} fade={70} position={[30, -20, -48]} growth={9} concentrate="outside" />
         <Cloud seed={13} segments={Math.round(segments * 0.5)} bounds={[22, 6, 16]} volume={16} color="#ffffff" opacity={0.28} speed={0.14} fade={50} position={[4, -26, -60]} growth={8} />

@@ -1,6 +1,6 @@
 import { Chapter } from "@/components/sections/Chapter";
 import { ChapterHeader } from "@/components/ui/ChapterHeader";
-import { PhotoWall } from "@/components/sections/archive/PhotoWall";
+import { PhotoWallClient } from "@/components/sections/archive/PhotoWallClient";
 import { PHOTOS } from "@/content/photos";
 import type { ChapterId } from "@/lib/flight-state";
 
@@ -23,7 +23,7 @@ export function ArchiveSection() {
         />
       </div>
       <div className="mt-[10vh]">
-        <PhotoWall photos={PHOTOS} />
+        <PhotoWallClient photos={PHOTOS} />
       </div>
     </Chapter>
   );

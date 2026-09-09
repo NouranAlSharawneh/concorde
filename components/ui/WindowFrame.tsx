@@ -28,12 +28,22 @@ export function WindowFrame() {
             "--radius": "0px",
             "--frame-op": 0,
             ease: "none",
-            scrollTrigger: { trigger: hero, start: "top top", end: "bottom 40%", scrub: 0.6, invalidateOnRefresh: true },
+            scrollTrigger: {
+              trigger: hero,
+              start: "top top",
+              end: "bottom 40%",
+              scrub: 0.6,
+              invalidateOnRefresh: true,
+              // Fully open, the frame is an invisible fixed element with a 200px-spread shadow that
+              // the compositor still has to consider for eleven chapters. Take it out of the picture.
+              onLeave: () => gsap.set(ref.current, { visibility: "hidden" }),
+              onEnterBack: () => gsap.set(ref.current, { visibility: "visible" }),
+            },
           },
         );
       });
       mm.add("(prefers-reduced-motion: reduce)", () => {
-        gsap.set(ref.current, { "--frame": "0px", "--radius": "0px", "--frame-op": 0 });
+        gsap.set(ref.current, { "--frame": "0px", "--radius": "0px", "--frame-op": 0, visibility: "hidden" });
       });
       return () => mm.revert();
     },

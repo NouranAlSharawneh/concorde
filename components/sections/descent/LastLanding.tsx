@@ -55,16 +55,25 @@ export function LastLanding() {
       const tags = gsap.utils.toArray<SVGGElement>("g[data-tag]", root);
       const stamps = gsap.utils.toArray<SVGTextElement>("text[data-landed]", root);
 
-      // getTotalLength() forces the browser to resolve the path's geometry, and it was being
-      // called for all three paths on every scrub frame for a value that never changes.
-      const lengths = paths.map((path) => path.getTotalLength());
+      // getPointAtLength() resolves the path's geometry every call, and it was running for all
+      // three paths on every scrub frame. Each glide path is sampled once into 64 points; the tag
+      // then rides an interpolation of those, which is indistinguishable on a curve this gentle.
+      const SAMPLES = 64;
+      const samples = paths.map((path) => {
+        const len = path.getTotalLength();
+        return Array.from({ length: SAMPLES + 1 }, (_, k) => path.getPointAtLength((len * k) / SAMPLES));
+      });
       const placeTag = (i: number, p: number) => {
-        const path = paths[i];
+        const pts = samples[i];
         const tag = tags[i];
-        if (!path || !tag) return;
-        const pt = path.getPointAtLength(lengths[i] * p);
+        if (!pts || !tag) return;
+        const u = Math.min(SAMPLES, Math.max(0, p * SAMPLES));
+        const k = Math.min(SAMPLES - 1, Math.floor(u));
+        const t = u - k;
+        const a = pts[k];
+        const b = pts[k + 1];
         // A CSS transform on the <g> is composited; setAttribute("transform") is a repaint.
-        tag.style.transform = `translate(${pt.x}px, ${pt.y}px)`;
+        tag.style.transform = `translate(${a.x + (b.x - a.x) * t}px, ${a.y + (b.y - a.y) * t}px)`;
       };
 
       if (reduced) {

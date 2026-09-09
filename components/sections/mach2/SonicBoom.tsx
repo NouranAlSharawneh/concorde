@@ -69,11 +69,17 @@ export function SonicBoom({ from = 1, to = 2.04, eyebrow, caption }: Props) {
           },
         });
         // Hold at Mach 1 while the shockwave passes, then climb to cruise.
+        // Replacing the text node of a 13rem figure forces layout and paint of the glyph run, so
+        // it only happens when the formatted string actually differs.
+        let shown = value.textContent;
         tl.to({}, { duration: 0.18 }).to(obj, {
           v: to,
           duration: 0.82,
           onUpdate: () => {
-            value.textContent = fmt(obj.v);
+            const next = fmt(obj.v);
+            if (next === shown) return;
+            shown = next;
+            value.textContent = next;
           },
         });
         return () => pulse.kill();

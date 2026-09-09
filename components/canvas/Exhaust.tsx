@@ -102,6 +102,7 @@ export function Exhaust({ burner, contrail }: Props) {
   }, []);
   useEffect(() => () => plumeGeo.dispose(), [plumeGeo]);
   const coreRefs = useRef<THREE.Sprite[]>([]);
+  const trailRefs = useRef<THREE.Mesh[]>([]);
 
   const trailUniforms = useMemo(
     () => ({ uTime: { value: 0 }, uAmount: { value: 0 }, uColor: { value: new THREE.Color("#ffffff") }, uNight: { value: 0 } }),
@@ -120,8 +121,13 @@ export function Exhaust({ burner, contrail }: Props) {
     trailUniforms.uNight.value = THREE.MathUtils.smoothstep(flight.alt, 0.55, 0.95);
     const flicker = 0.85 + Math.sin(state.clock.elapsedTime * 37) * 0.08 + Math.sin(state.clock.elapsedTime * 61) * 0.07;
     const b = burner.value * flicker;
+    // Everything the burner drives is hidden outright when it is off, so the cold chapters (hero,
+    // anatomy, legacy) do not rasterise eight additive sprites and eight plume planes of nothing.
+    const lit = b > 0.01;
     coreRefs.current.forEach((s, i) => {
       if (!s) return;
+      s.visible = lit;
+      if (!lit) return;
       const f = 1 + Math.sin(state.clock.elapsedTime * 61 + i * 1.7) * 0.08;
       s.scale.setScalar((1.1 + b * 0.9) * f);
       (s.material as THREE.SpriteMaterial).opacity = Math.min(1, b * 1.4);
@@ -135,11 +141,18 @@ export function Exhaust({ burner, contrail }: Props) {
     });
     glowRefs.current.forEach((s, i) => {
       if (!s) return;
+      s.visible = lit;
+      if (!lit) return;
       // Wide, faint halo only — the heat is carried by the core + plume.
       s.scale.setScalar(2.4 + b * 2.6 + Math.sin(state.clock.elapsedTime * 50 + i) * 0.2 * b);
       (s.material as THREE.SpriteMaterial).opacity = Math.min(1, b * 1.1) * 0.32;
     });
     if (lightRef.current) lightRef.current.intensity = burner.value * 48;
+    // Likewise the four double-sided contrail planes: large, transparent, and empty until there is a contrail.
+    const trailing = contrail.value > 0.01;
+    trailRefs.current.forEach((m) => {
+      if (m) m.visible = trailing;
+    });
   });
 
   return (
@@ -186,7 +199,16 @@ export function Exhaust({ burner, contrail }: Props) {
       ))}
       <pointLight ref={lightRef} position={[0, 0.6, 15]} color="#ffb070" intensity={0} distance={44} decay={2} />
       {NOZZLES.map((p, i) => (
-        <mesh key={`t${i}`} position={[p[0], p[1], p[2] + 110]} rotation={[Math.PI / 2, 0, 0]} renderOrder={10} material={trailMaterial}>
+        <mesh
+          key={`t${i}`}
+          ref={(el) => {
+            if (el) trailRefs.current[i] = el;
+          }}
+          position={[p[0], p[1], p[2] + 110]}
+          rotation={[Math.PI / 2, 0, 0]}
+          renderOrder={10}
+          material={trailMaterial}
+        >
           <planeGeometry args={[9, 220, 1, 1]} />
         </mesh>
       ))}
