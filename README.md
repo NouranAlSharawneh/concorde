@@ -34,3 +34,7 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Attribution
+
+The 3D aircraft is based on ["Concorde 3D Model"](https://sketchfab.com/3d-models/concorde-3d-model-d2222f34152d4850afff0124872fc9ba) by [thomas333](https://sketchfab.com/thomas333), licensed under [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/). Photographs are from Wikimedia Commons contributors under their respective licences (see `content/photos.ts`).
