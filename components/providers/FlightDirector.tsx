@@ -4,6 +4,16 @@ import { useCallback, useEffect, useRef } from "react";
 import { gsap, ScrollTrigger, useGSAP } from "@/lib/gsap";
 import { flight, useUI, type ChapterId, type Theme } from "@/lib/flight-state";
 import { samplePalette, rgbToCss } from "@/lib/altitude";
+import { prefersReducedMotion } from "@/lib/use-reduced-motion";
+
+type Rgb = [number, number, number];
+/** Must match the :root / html[data-theme="dark"] values in globals.css. */
+const THEME_COLOURS: Record<Theme, { ink: Rgb; paper: Rgb }> = {
+  light: { ink: [14, 27, 43], paper: [255, 255, 255] },
+  dark: { ink: [238, 242, 255], paper: [7, 11, 26] },
+};
+const THEME_FADE = 0.7; // seconds
+const THEME_WRITE_MS = 48; // ~20 writes/s: each one restyles the whole document
 
 /**
  * Reads every <section data-chapter data-alt="from:to" data-theme> on the page and
@@ -18,6 +28,50 @@ export function FlightDirector() {
   // Chapter extents in document space, cached. Re-measuring 12 elements 8x a second forced a
   // synchronous layout every time; the geometry only actually changes on a ScrollTrigger refresh.
   const bounds = useRef<ReadonlyArray<{ top: number; bottom: number; theme: Theme }>>([]);
+  // The ink/paper crossfade in flight, and the colours currently on screen (so a flip that
+  // interrupts another starts from where it actually is, not from the previous theme's end).
+  const themeTween = useRef<gsap.core.Tween | null>(null);
+  const shown = useRef<{ ink: Rgb; paper: Rgb }>({ ink: [...THEME_COLOURS.light.ink], paper: [...THEME_COLOURS.light.paper] });
+
+  const crossfadeTheme = useCallback((to: Theme) => {
+    const root = document.documentElement.style;
+    const target = THEME_COLOURS[to];
+    themeTween.current?.kill();
+    if (prefersReducedMotion()) {
+      root.removeProperty("--ink");
+      root.removeProperty("--paper");
+      shown.current = { ink: [...target.ink], paper: [...target.paper] };
+      return;
+    }
+    const from = { ink: [...shown.current.ink] as Rgb, paper: [...shown.current.paper] as Rgb };
+    const state = { t: 0 };
+    let lastWrite = -Infinity;
+    const css = (c: Rgb) => `rgb(${Math.round(c[0])} ${Math.round(c[1])} ${Math.round(c[2])})`;
+    themeTween.current = gsap.to(state, {
+      t: 1,
+      duration: THEME_FADE,
+      ease: "flight",
+      onUpdate: () => {
+        const now = performance.now();
+        if (state.t < 1 && now - lastWrite < THEME_WRITE_MS) return;
+        lastWrite = now;
+        const cur = shown.current;
+        for (let i = 0; i < 3; i++) {
+          cur.ink[i] = from.ink[i] + (target.ink[i] - from.ink[i]) * state.t;
+          cur.paper[i] = from.paper[i] + (target.paper[i] - from.paper[i]) * state.t;
+        }
+        root.setProperty("--ink", css(cur.ink));
+        root.setProperty("--paper", css(cur.paper));
+      },
+      onComplete: () => {
+        // Hand back to the stylesheet: html[data-theme] carries exactly these end values.
+        root.removeProperty("--ink");
+        root.removeProperty("--paper");
+        shown.current = { ink: [...target.ink], paper: [...target.paper] };
+        themeTween.current = null;
+      },
+    });
+  }, []);
 
   const measureChapters = useCallback(() => {
     const y = window.scrollY;
@@ -44,9 +98,10 @@ export function FlightDirector() {
     }
     if (document.documentElement.dataset.theme !== bestTheme) {
       document.documentElement.dataset.theme = bestTheme;
+      crossfadeTheme(bestTheme);
       setTheme(bestTheme);
     }
-  }, [setTheme]);
+  }, [setTheme, crossfadeTheme]);
 
   useGSAP(
     () => {

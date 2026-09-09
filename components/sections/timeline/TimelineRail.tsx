@@ -69,7 +69,9 @@ export function TimelineRail({ entries }: Props) {
 
       // Row centres in list coordinates, measured on every ScrollTrigger refresh.
       let centres: number[] = [];
+      let trackH = 0;
       const measure = () => {
+        trackH = trackEl.offsetHeight;
         const top = listEl.getBoundingClientRect().top;
         centres = rows.map((r) => {
           const b = r.getBoundingClientRect();
@@ -97,8 +99,7 @@ export function TimelineRail({ entries }: Props) {
             target = years[i] + (years[i + 1] - years[i]) * t;
           }
           setYear(target);
-          const h = trackEl.offsetHeight;
-          dotTo(self.progress * h);
+          dotTo(self.progress * trackH);
           fillTo(self.progress);
         },
       });

@@ -4,7 +4,8 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Lightformer, PerformanceMonitor } from "@react-three/drei";
-import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
+import { EffectComposer, Bloom, Vignette, ToneMapping } from "@react-three/postprocessing";
+import { ToneMappingMode } from "postprocessing";
 import { Concorde, type ConcordeHandle } from "./Concorde";
 import { SkyBackdrop } from "./SkyBackdrop";
 import { StarField } from "./StarField";
@@ -16,6 +17,13 @@ import { HeroClouds } from "./HeroClouds";
 import type { DeviceTier } from "@/lib/device";
 import { flight } from "@/lib/flight-state";
 import { sunDirection } from "@/lib/sun";
+import { useFlightGate } from "@/lib/use-flight-gate";
+
+// The cloud deck fades out by alt 0.74 and the hero clouds by 0.08 (hero only). Past those points
+// drei's <Clouds> still decomposed, sorted and re-uploaded every billboard each frame with nothing
+// to show, so they are unmounted instead, with a little hysteresis either side.
+const deckGate = (alt: number, wasOpen: boolean) => (wasOpen ? alt < 0.82 : alt < 0.76);
+const heroGate = (alt: number, wasOpen: boolean) => flight.chapter === "hero" || (wasOpen ? alt < 0.14 : alt < 0.1);
 
 interface Props {
   tier: DeviceTier;
@@ -93,6 +101,8 @@ export default function Scene({ tier, reducedMotion }: Props) {
   const onReady = useCallback((h: ConcordeHandle) => {
     handle.current = h;
   }, []);
+  const deckOn = useFlightGate(deckGate);
+  const heroOn = useFlightGate(heroGate);
 
   return (
     <Canvas
@@ -108,9 +118,13 @@ export default function Scene({ tier, reducedMotion }: Props) {
       style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }}
       eventSource={undefined}
     >
+      {/* Each dpr step re-allocates the drawing buffer and every composer target, so a device sitting
+          on the threshold must not be allowed to oscillate: three flips and it is parked at 1.25. */}
       <PerformanceMonitor
+        flipflops={3}
+        onFallback={() => setDpr(Math.min(1.25, tier === "low" ? 1 : 1.25))}
         onDecline={() => setDpr((d) => Math.max(1, d - 0.25))}
-        onIncline={() => setDpr((d) => Math.min(tier === "high" ? 1.75 : tier === "mid" ? 1.25 : 1, d + 0.25))}
+        onIncline={() => setDpr((d) => Math.min(tier === "high" ? 1.5 : tier === "mid" ? 1.25 : 1, d + 0.25))}
       />
       <VisibilityGate />
       <SkyBackdrop />
@@ -129,15 +143,20 @@ export default function Scene({ tier, reducedMotion }: Props) {
         <Concorde ref={aircraft} onReady={onReady}>
           {debug !== "noexhaust" && <Exhaust burner={burner} contrail={contrail} />}
         </Concorde>
-        {debug !== "nocloud" && <CloudDeck tier={tier} cloudY={cloudY} />}
-        {debug !== "nocloud" && <HeroClouds tier={tier} />}
+        {debug !== "nocloud" && deckOn && <CloudDeck tier={tier} cloudY={cloudY} />}
+        {debug !== "nocloud" && heroOn && <HeroClouds tier={tier} />}
       </Suspense>
       )}
       <CameraRig aircraft={aircraft} handle={handle} burner={burner} contrail={contrail} cloudY={cloudY} reducedMotion={reducedMotion} />
       {tier === "high" && (
-        <EffectComposer multisampling={4}>
+        /* 2× MSAA: the airframe edge is the only hard edge in the frame, and every cloud, contrail
+           and burner layer pays per sample. The composer also switches the renderer to NoToneMapping
+           while mounted, so the ACES set above is reapplied here as the last pass, or the high tier
+           silently gets a different image from mid and low. */
+        <EffectComposer multisampling={2}>
           <Bloom luminanceThreshold={1.05} luminanceSmoothing={0.15} intensity={0.5} mipmapBlur />
           <Vignette eskil={false} offset={0.25} darkness={0.35} />
+          <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
         </EffectComposer>
       )}
     </Canvas>

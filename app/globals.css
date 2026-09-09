@@ -33,10 +33,12 @@
   --nav-h: 4.5rem;
 }
 
-/* Theme tokens flip per section (data-theme on <html>), animated via registered properties. */
+/* Theme tokens flip per section (data-theme on <html>). The crossfade between the two is driven by
+   FlightDirector, which writes --ink/--paper inline at ~20Hz for 0.7s and then clears them so these
+   rules take over. A CSS transition on the inherited variables did the same at 60Hz, and every
+   frame of it was a whole-document style recalc, since nearly everything consumes them. */
 @property --ink { syntax: "<color>"; inherits: true; initial-value: #0e1b2b; }
 @property --paper { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
-html { transition: --ink 0.7s var(--ease-flight), --paper 0.7s var(--ease-flight); }
 html[data-theme="dark"] {
   --ink: #eef2ff;
   --paper: #070b1a;
@@ -124,9 +126,10 @@ html[data-theme="dark"] {
       color-mix(in oklab, var(--paper) 30%, transparent) 0%,
       color-mix(in oklab, var(--paper) 14%, transparent) 100%
     );
-    /* Less paper, more blur: the frost comes from the backdrop, not the fill. */
-    -webkit-backdrop-filter: blur(48px) saturate(180%);
-    backdrop-filter: blur(48px) saturate(180%);
+    /* Less paper, more blur: the frost comes from the backdrop, not the fill. The radius is what
+       the blur costs, and it is re-derived every frame over the moving sky, so 20px is the budget. */
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    backdrop-filter: blur(20px) saturate(140%);
     border: 1px solid color-mix(in oklab, var(--paper) 45%, transparent);
     box-shadow:
       inset 0 1px 0 color-mix(in oklab, var(--paper) 85%, transparent),
@@ -228,9 +231,34 @@ html[data-theme="dark"] {
   .mask-lines { overflow: hidden; }
   .mask-lines > * { display: block; }
   .text-stroke { -webkit-text-stroke: 1px var(--ink-24); color: transparent; }
-  /* Finale wordmark: hairline by default, solid under the cursor. */
-  .finale-wordmark text { stroke-opacity: 0.42; transition: stroke-opacity 0.6s var(--ease-flight), fill 0.6s var(--ease-flight); }
-  .finale-wordmark:hover text { stroke-opacity: 0.9; }
+  /* Finale wordmark: set to the container's width (cqw scales with the row, so it never wraps or
+     overflows) and dissolving a little toward its own baseline. */
+  .finale-stack { container-type: inline-size; }
+  .finale-wordmark-clip {
+    position: relative;
+    overflow: hidden;
+    line-height: 0;
+    padding: 0.04em 0.05em 0.06em;
+    margin: 0 -0.05em;
+    font-size: 19cqw; /* SSR guess; Wordmark.tsx measures and corrects it */
+    color: var(--ink); /* read by the particle canvas */
+  }
+  .finale-wordmark {
+    display: inline-block;
+    font-size: 1em;
+    font-weight: 800;
+    font-variation-settings: "wdth" 75;
+    letter-spacing: -0.015em;
+    line-height: 0.8;
+    white-space: nowrap;
+    /* The fill: bright at the cap line, sinking toward the night at the baseline. */
+    background: linear-gradient(to bottom, var(--ink) 0%, var(--ink) 60%, color-mix(in oklab, var(--ink) 42%, var(--night)) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  /* With a cursor the word is drawn from particles on the canvas; the text only sets the box. */
+  .finale-wordmark-clip.has-particles .finale-wordmark { visibility: hidden; }
   /* Archive backdrop: long, soft cirrus streaks drifting across the sky behind the prints. */
   .archive-cirrus {
     position: absolute; left: -40%; width: 70%; height: 7vh; border-radius: 999px; pointer-events: none;
@@ -240,20 +268,21 @@ html[data-theme="dark"] {
   }
   @keyframes archive-cirrus-drift { from { transform: translate3d(0, 0, 0) scaleX(1); } 50% { transform: translate3d(110%, -1vh, 0) scaleX(1.25); } to { transform: translate3d(200%, 0, 0) scaleX(1); } }
   @media (prefers-reduced-motion: reduce) { .archive-cirrus { animation: none; transform: translate3d(90%, 0, 0); } }
+  /* Film grain. A plain translucent layer the size of the viewport: no blend mode (a fullscreen
+     blend made the compositor flatten everything beneath it, all three WebGL canvases included,
+     on every frame) and no oversize box. The shimmer re-tiles the texture instead of moving the
+     layer. Phones keep the texture, not the shimmer. */
   .grain::after {
-    content: ""; position: fixed; inset: -50%; pointer-events: none; z-index: 60;
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 60;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.55'/></svg>");
-    opacity: 0.05; mix-blend-mode: overlay;
+    opacity: 0.035;
     animation: grain 0.6s steps(3) infinite;
   }
-  /* The grain is a fullscreen mix-blend-mode layer; re-stepping its transform 5x a second
-     forces the compositor to re-read everything beneath it, including both WebGL canvases.
-     Phones keep the texture, not the shimmer. */
   @media (hover: none) and (pointer: coarse) {
     .grain::after { animation: none; }
   }
   @keyframes grain {
-    0% { transform: translate(0, 0); } 33% { transform: translate(-3%, 2%); } 66% { transform: translate(2%, -3%); } 100% { transform: translate(0, 0); }
+    0% { background-position: 0 0; } 33% { background-position: -37px 23px; } 66% { background-position: 29px -41px; } 100% { background-position: 0 0; }
   }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { scrollbar-width: none; }

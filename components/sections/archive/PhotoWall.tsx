@@ -256,6 +256,10 @@ export function PhotoWall({ photos }: Props) {
   const tier = useDeviceTier();
   const coarse = tier !== "high";
   const [visible, setVisible] = useState(false);
+  // The canvas — and with it a second WebGL context and eleven photo textures — is created the
+  // first time the wall comes within reach, not at page load where it sat on the preloader's
+  // critical path for a chapter five screens down. Once armed it stays mounted.
+  const [armed, setArmed] = useState(false);
   const shared = useMemo<Shared>(
     () => ({
       progress: 0,
@@ -275,7 +279,13 @@ export function PhotoWall({ photos }: Props) {
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
-    const io = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { rootMargin: "40% 0px" });
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        setVisible(entry.isIntersecting);
+        if (entry.isIntersecting) setArmed(true);
+      },
+      { rootMargin: "40% 0px" },
+    );
     io.observe(el);
     return () => io.disconnect();
   }, []);
@@ -432,17 +442,19 @@ export function PhotoWall({ photos }: Props) {
         </div>
         <div className="absolute inset-x-[var(--gutter)] top-[calc(var(--gutter)*0.9+1.6rem)] h-px bg-[var(--ink)]/12" />
       </div>
-      <Canvas
-        dpr={tier === "low" ? 1 : tier === "mid" ? [1, 1.25] : [1, 1.75]}
-        frameloop={visible ? "always" : "demand"}
-        gl={{ alpha: true, antialias: !coarse, powerPreference: "high-performance", stencil: false, depth: false }}
-        camera={{ position: [0, 0, 4.6], fov: 40, near: 0.1, far: 50 }}
-        style={{ position: "absolute", inset: 0 }}
-      >
-        <Suspense fallback={null}>
-          <Wall photos={photos} shared={shared} />
-        </Suspense>
-      </Canvas>
+      {armed && (
+        <Canvas
+          dpr={tier === "low" ? 1 : tier === "mid" ? [1, 1.25] : [1, 1.75]}
+          frameloop={visible ? "always" : "demand"}
+          gl={{ alpha: true, antialias: !coarse, powerPreference: "high-performance", stencil: false, depth: false }}
+          camera={{ position: [0, 0, 4.6], fov: 40, near: 0.1, far: 50 }}
+          style={{ position: "absolute", inset: 0 }}
+        >
+          <Suspense fallback={null}>
+            <Wall photos={photos} shared={shared} />
+          </Suspense>
+        </Canvas>
+      )}
 
       {/* Captions: all rendered once, the active one is switched via data-active (no React re-render inside the pin). */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 px-[var(--gutter)] pb-[calc(var(--gutter)*0.8)]">

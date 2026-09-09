@@ -7,6 +7,9 @@ import { useFrame } from "@react-three/fiber";
 import { flight } from "@/lib/flight-state";
 import type { DeviceTier } from "@/lib/device";
 
+/** drei fetches its default cloud sprite from a third-party CDN at runtime, on the preloader's critical path. Self-hosted instead. */
+const CLOUD_TEXTURE = "/textures/cloud.png";
+
 interface Props {
   tier: DeviceTier;
   cloudY: { value: number };
@@ -52,7 +55,8 @@ const VOLUMES: readonly Volume[] = [
 export function CloudDeck({ tier, cloudY }: Props) {
   const group = useRef<THREE.Group>(null);
   const count = tier === "high" ? VOLUMES.length : tier === "mid" ? 12 : 7;
-  const segments = tier === "high" ? 8 : tier === "mid" ? 6 : 4;
+  const segments = tier === "high" ? 6 : tier === "mid" ? 5 : 4;
+  const lastFade = useRef(-1);
 
   useFrame((state, dt) => {
     if (!group.current) return;
@@ -60,15 +64,20 @@ export function CloudDeck({ tier, cloudY }: Props) {
     g.position.y += (cloudY.value - g.position.y) * (1 - Math.pow(0.001, dt));
     const fade = 1 - THREE.MathUtils.smoothstep(flight.alt, 0.4, 0.74);
     g.visible = fade > 0.01;
-    g.traverse((o) => {
-      if (o instanceof THREE.Mesh && o.material instanceof THREE.Material) o.material.opacity = fade;
-    });
+    // The opacity walk touches every mesh; only do it when the fade has actually moved.
+    if (Math.abs(fade - lastFade.current) > 0.004) {
+      lastFade.current = fade;
+      g.traverse((o) => {
+        if (o instanceof THREE.Mesh && o.material instanceof THREE.Material) o.material.opacity = fade;
+      });
+    }
     g.position.x = Math.sin(state.clock.elapsedTime * 0.05) * 4 + flight.pointer.x * -3;
   });
 
   return (
-    <group ref={group} position={[0, -6, 0]}>
-      <Clouds material={THREE.MeshBasicMaterial} limit={400} range={400}>
+    // Starts where the deck currently belongs, so a remount mid-climb does not sink in from the hero height.
+    <group ref={group} position={[0, cloudY.value, 0]}>
+      <Clouds material={THREE.MeshBasicMaterial} limit={400} range={400} texture={CLOUD_TEXTURE}>
         {VOLUMES.slice(0, count).map((v) => (
           <Cloud
             key={v.seed}

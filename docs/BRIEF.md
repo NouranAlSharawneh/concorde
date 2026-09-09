@@ -66,6 +66,6 @@ The section component must be a **server component unless it needs hooks**; anim
 
 All facts must come from `content/*.ts` (typed, with `source` URLs). The verified research digest is in the plan file: `/Users/nuranalsharawneh/.claude/plans/we-are-going-to-cozy-russell.md` (section "Research digest — Concorde facts"). Do not invent numbers.
 
-## Credits (must appear in footer)
+## Credits
 
-Model: "This work is based on \"Concorde 3D Model\" (https://sketchfab.com/3d-models/concorde-3d-model-d2222f34152d4850afff0124872fc9ba) by thomas333 (https://sketchfab.com/thomas333) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)".
+The 3D model attribution (CC-BY-4.0, thomas333) lives in `README.md`; the footer deliberately carries no model credit. Photo attributions render under each print in the archive chapter.

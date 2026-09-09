@@ -3,9 +3,14 @@
 import { useRef } from "react";
 import { gsap, ScrollTrigger, useGSAP } from "@/lib/gsap";
 import { flight, useUI } from "@/lib/flight-state";
-import * as THREE from "three";
 import { useReducedMotion } from "@/lib/use-reduced-motion";
 import type { Hotspot } from "@/content/chapters";
+
+/** Hermite smoothstep of x over [a, b]; the one thing this file used `three` for. */
+function smoothstep(x: number, a: number, b: number): number {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
 
 interface Props {
   hotspots: readonly Hotspot[];
@@ -40,7 +45,12 @@ export function HotspotStepper({ hotspots, distance = "+=300%" }: Props) {
       gsap.set(cards, { autoAlpha: 0, y: 28 });
       gsap.set(cards[0], { autoAlpha: 1, y: 0 });
 
+      // Called on every scrub frame; the index only changes a handful of times per pin, and each
+      // write here is a style invalidation, so identical calls are dropped.
+      let activeIdx = -1;
       const setActive = (i: number) => {
+        if (i === activeIdx) return;
+        activeIdx = i;
         if (index) index.textContent = pad(i + 1);
         dots.forEach((d, j) => d.setAttribute("data-active", j === i ? "true" : "false"));
       };
@@ -90,7 +100,7 @@ export function HotspotStepper({ hotspots, distance = "+=300%" }: Props) {
             const u = self.progress * count;
             const i = Math.min(count - 1, Math.floor(u));
             const frac = u - i;
-            const e = THREE.MathUtils.smoothstep(frac, 0.6, 1);
+            const e = smoothstep(frac, 0.6, 1);
             const move = i >= count - 1 ? 0 : e; // the last hotspot holds; the post-pin trigger takes over
             flight.chapterProgress = (1 + i + move) / (count + 1);
           },

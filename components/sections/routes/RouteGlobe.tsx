@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { gsap, ScrollTrigger, useGSAP } from "@/lib/gsap";
@@ -173,9 +174,13 @@ const smoothstep = (a: number, b: number, v: number) => {
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 /** Resolve any CSS colour string (hex, rgb(), color(), oklab()…) through a 2D canvas. */
+const lastRaw = new Map<string, string>();
 function readCssColor(name: string, probe: CanvasRenderingContext2D, out: THREE.Color): void {
   const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   if (!raw) return;
+  // The readback is the expensive half; skip it while the variable's string is unchanged.
+  if (lastRaw.get(name) === raw) return;
+  lastRaw.set(name, raw);
   probe.clearRect(0, 0, 1, 1);
   probe.fillStyle = raw;
   probe.fillRect(0, 0, 1, 1);
@@ -506,6 +511,44 @@ interface MiniConcordeProps {
   globeRef: RefObject<Globe | null>;
 }
 
+/**
+ * The airframe from the hero glb as ONE geometry (positions + normals only, gear dropped, node
+ * transforms baked), built once and kept. At ~20px on screen the 26 separate draws, each with its
+ * own frustum-unculled bounding test, were pure overhead; one mesh with one material is one draw.
+ */
+let miniGeometry: THREE.BufferGeometry | null = null;
+function buildMiniGeometry(scene: THREE.Group): THREE.BufferGeometry {
+  if (miniGeometry) return miniGeometry;
+  scene.updateMatrixWorld(true);
+  const parts: THREE.BufferGeometry[] = [];
+  scene.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh) || GEAR_NODES.has(obj.name)) return;
+    const src = obj.geometry as THREE.BufferGeometry;
+    const g = new THREE.BufferGeometry();
+    // Positions ship quantised (int16, decoded by the node transform); applyMatrix4 on a normalised
+    // attribute would clamp back into int16 range, so promote to float32 first.
+    for (const name of ["position", "normal"] as const) {
+      const a = src.getAttribute(name);
+      if (!a) return;
+      const out = new Float32Array(a.count * 3);
+      for (let i = 0; i < a.count; i++) {
+        out[i * 3] = a.getX(i);
+        out[i * 3 + 1] = a.getY(i);
+        out[i * 3 + 2] = a.getZ(i);
+      }
+      g.setAttribute(name, new THREE.BufferAttribute(out, 3));
+    }
+    if (src.index) g.setIndex(src.index.clone());
+    g.applyMatrix4(obj.matrixWorld);
+    parts.push(g);
+  });
+  const merged = mergeGeometries(parts, false);
+  parts.forEach((g) => g.dispose());
+  merged.computeBoundingSphere();
+  miniGeometry = merged;
+  return merged;
+}
+
 /** The same cached glb as the hero aircraft, ~0.13 units long, in a single ink-coloured material. */
 function MiniConcorde({ planeRef, globeRef }: MiniConcordeProps) {
   const { scene } = useGLTF(MODEL_URL, false, true);
@@ -515,16 +558,10 @@ function MiniConcorde({ planeRef, globeRef }: MiniConcordeProps) {
   useEffect(() => {
     const h = holder.current;
     if (!h) return;
-    const model = scene.clone(true);
     // Own material: the shared glb materials carry the hero's droop-nose shader and env-map tuning.
     const material = new THREE.MeshStandardMaterial({ color: "#eef2ff", roughness: 0.55, metalness: 0.05, transparent: true });
-    model.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
-      obj.material = material;
-      obj.frustumCulled = false;
-      obj.renderOrder = 3;
-      if (GEAR_NODES.has(obj.name)) obj.visible = false;
-    });
+    const model = new THREE.Mesh(buildMiniGeometry(scene), material);
+    model.renderOrder = 3;
     h.add(model);
     materialRef.current = material;
     return () => {

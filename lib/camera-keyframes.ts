@@ -118,7 +118,7 @@ export const POSES: Record<ChapterId, readonly Pose[]> = {
     // …and flies on past, climbing away up-left…
     pose({ cam: [18, -6, 40], look: [-6, 8, -30], fov: 34, rot: [d(6), d(-8), d(-4)], pos: [-30, 76, -260], burner: 0.7, contrail: 1, cloudY: -60 }),
     // …until its reheat is indistinguishable from the stars.
-    pose({ cam: [18, -6, 40], look: [-6, 8, -30], fov: 34, rot: [d(6), d(-8), d(-2)], pos: [-60, 190, -560], burner: 0.3, contrail: 0.8, cloudY: -60 }),
+    pose({ cam: [18, -6, 40], look: [-6, 8, -30], fov: 34, rot: [d(6), d(-8), d(-2)], pos: [-60, 190, -560], burner: 0.15, contrail: 0.8, cloudY: -60 }),
   ],
 };
 
