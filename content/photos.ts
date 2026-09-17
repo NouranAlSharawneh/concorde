@@ -3,12 +3,17 @@
  * public domain / CC0 or CC BY / CC BY-SA; the attribution line rendered under each
  * frame (author · licence) is required by the CC licences — keep it.
  *
- * Files live in /public/images/archive/<slug>.webp (max 1800px, q80) with a 900px
- * <slug>-900.webp variant for phones and a 24px <slug>-blur.webp placeholder.
- * Captions use only what the Commons description and date fields state.
+ * Files live in /public/images/archive/<slug>.webp (max 1600px, q82) with a 900px
+ * <slug>-900.webp variant for phones and a 24px <slug>-blur.webp placeholder, shown while the
+ * photograph itself loads. Captions use only what the Commons description and date fields state.
+ *
+ * 1600px is sized to the wall rather than to the source: a print occupies at most ~1520 device
+ * pixels on a retina laptop, so anything larger is only ever minified on its way to the screen.
+ * The 1800px originals are kept, unserved, in /_assets/archive-masters — regenerate this set from
+ * those, never from these, or each pass compounds the last one's compression.
  *
  * The archive wall uploads every photo to the GPU as a texture, so the 900px set is not a
- * bandwidth optimisation — it is what keeps resident VRAM near 30 MB instead of ~127 MB,
+ * bandwidth optimisation — it is what keeps resident VRAM near 30 MB instead of ~95 MB,
  * which is where mobile Safari starts dropping WebGL contexts.
  */
 export interface Photo {
@@ -48,8 +53,8 @@ const file = (slug: string) => ({ slug, src: `${DIR}/${slug}.webp`, small: `${DI
 export const PHOTOS: readonly Photo[] = [
   {
     ...file("first-flight-toulouse-1969"),
-    width: 1800,
-    height: 1198,
+    width: 1600,
+    height: 1065,
     title: "First flight",
     caption:
       "Concorde seen from below over Toulouse-Blagnac during its first test flight, 2 March 1969. From the André Cros collection held by the city archives of Toulouse.",
@@ -62,8 +67,8 @@ export const PHOTOS: readonly Photo[] = [
   },
   {
     ...file("schiphol-1982"),
-    width: 1800,
-    height: 1199,
+    width: 1600,
+    height: 1066,
     title: "Landing at Schiphol",
     caption:
       "Nose drooped and gear down, a British Airways Concorde in the 'British' livery lands at Amsterdam Schiphol, 14 August 1982.",
@@ -76,8 +81,8 @@ export const PHOTOS: readonly Photo[] = [
   },
   {
     ...file("heathrow-take-off-1987"),
-    width: 1625,
-    height: 875,
+    width: 1600,
+    height: 862,
     title: "Departing 09R",
     caption:
       "A British Airways Concorde rotates from runway 09R at Heathrow, photographed from the end of a Terminal 2 pier, 1987.",
@@ -89,8 +94,8 @@ export const PHOTOS: readonly Photo[] = [
   },
   {
     ...file("flight-deck-mach-2-1984"),
-    width: 1800,
-    height: 1152,
+    width: 1600,
+    height: 1024,
     title: "Mach 2, from the jump seat",
     caption:
       "The flight engineer's view of the flight deck at Mach 2 aboard G-BOAB, on a British Airways service inbound to London Heathrow, 1984.",
@@ -102,8 +107,8 @@ export const PHOTOS: readonly Photo[] = [
   },
   {
     ...file("cockpit-g-boaa"),
-    width: 1800,
-    height: 1200,
+    width: 1600,
+    height: 1067,
     title: "Flight deck, Alpha Alpha",
     caption:
       "The cockpit of G-BOAA, the first Concorde delivered to British Airways and the aircraft that flew the first BA service to Bahrain on 21 January 1976. Preserved at the National Museum of Flight, East Fortune.",
@@ -116,8 +121,8 @@ export const PHOTOS: readonly Photo[] = [
   },
   {
     ...file("cabin-museum-of-flight"),
-    width: 1800,
-    height: 1200,
+    width: 1600,
+    height: 1067,
     title: "The cabin",
     caption: "The passenger cabin of the Concorde preserved at the Museum of Flight near Seattle.",
     year: 2015,
@@ -128,8 +133,8 @@ export const PHOTOS: readonly Photo[] = [
   },
   {
     ...file("kansai-landing-1994"),
-    width: 1800,
-    height: 1039,
+    width: 1600,
+    height: 924,
     title: "Air France at Kansai",
     caption: "An Air France Concorde over the water on approach to Kansai International Airport, Osaka, 5 September 1994.",
     year: 1994,
@@ -140,8 +145,8 @@ export const PHOTOS: readonly Photo[] = [
   },
   {
     ...file("pepsi-livery-1996"),
-    width: 1800,
-    height: 1212,
+    width: 1600,
+    height: 1077,
     title: "The blue Concorde",
     caption: "F-BTSD at Gatwick in Pepsi's livery, 2 April 1996 — the only Concorde ever painted a colour other than white, and only for a fortnight.",
     year: 1996,
@@ -152,8 +157,8 @@ export const PHOTOS: readonly Photo[] = [
   },
   {
     ...file("heathrow-approach-2003"),
-    width: 1800,
-    height: 1185,
+    width: 1600,
+    height: 1053,
     title: "Inbound from JFK",
     caption:
       "G-BOAD arrives at Heathrow from New York JFK on an overcast afternoon, 24 May 2003. The aircraft is now displayed at the Intrepid Museum in New York.",
@@ -179,8 +184,8 @@ export const PHOTOS: readonly Photo[] = [
   },
   {
     ...file("filton-preserved-g-boaf"),
-    width: 1800,
-    height: 1347,
+    width: 1600,
+    height: 1197,
     title: "Alpha Foxtrot at rest",
     caption:
       "G-BOAF preserved at Filton, the airfield from which it first flew on 20 April 1979 and where it made the last ever Concorde landing in 2003.",
