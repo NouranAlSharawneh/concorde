@@ -38,9 +38,13 @@ const vert = /* glsl */ `
 
 const frag = /* glsl */ `
   precision highp float;
-  uniform sampler2D uMap; uniform float uTime; uniform vec2 uMouse; uniform float uHover; uniform float uGrain; uniform float uReveal;
+  uniform sampler2D uMap; uniform sampler2D uMapHi; uniform float uSwap;
+  uniform float uTime; uniform vec2 uMouse; uniform float uHover; uniform float uGrain; uniform float uReveal;
   varying vec2 vUv; varying float vLift;
   float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+  // The 24px placeholder and the photograph, cross-dissolved as the latter lands. Both samplers are
+  // always bound — uMapHi starts out as the placeholder — so there is never an unbound unit to read.
+  vec3 print(vec2 uv) { return mix(texture2D(uMap, uv).rgb, texture2D(uMapHi, uv).rgb, uSwap); }
   void main() {
     // Slight chromatic split that follows the cursor, like a loupe over a print.
     vec2 dir = (vUv - uMouse);
@@ -49,9 +53,9 @@ const frag = /* glsl */ `
     if (uHover > 0.002) {
       float ca = smoothstep(0.5, 0.0, d) * uHover * 0.0028;
       vec2 off = normalize(dir + 1e-5) * ca;
-      col = vec3(texture2D(uMap, vUv + off).r, texture2D(uMap, vUv).g, texture2D(uMap, vUv - off).b);
+      col = vec3(print(vUv + off).r, print(vUv).g, print(vUv - off).b);
     } else {
-      col = texture2D(uMap, vUv).rgb;
+      col = print(vUv);
     }
     // Paper-like shading from the cloth displacement.
     col *= 1.0 + vLift * 0.35;
@@ -75,7 +79,7 @@ interface Shared {
   hover: boolean;
   /** Plane tessellation, dropped on phones — the wind displacement is very low frequency. */
   segs: readonly [number, number];
-  /** Use the 900px texture set: 11 x 1800px prints is ~127 MB of VRAM, enough to lose the context. */
+  /** Use the 900px texture set: 11 x 1600px prints is ~95 MB of VRAM, enough to lose the context. */
   lowRes: boolean;
   setActive: (i: number) => void; // called with the print actually centred in view
 }
@@ -108,13 +112,42 @@ function wallMetrics(aspect: number, photos: readonly Photo[]): { h: number; gap
   return { h, gap, total };
 }
 
+/**
+ * One texture per URL, shared between the idle preload below and the prints themselves, so warming
+ * the cache early costs one fetch and one decode rather than two. The wall mounts once and lives for
+ * the rest of the session, so nothing is ever evicted — and nothing here is disposed, because the
+ * prints do not own these textures.
+ */
+const loader = new THREE.TextureLoader();
+const prints = new Map<string, Promise<THREE.Texture>>();
+
+function loadPrint(url: string, anisotropy: number): Promise<THREE.Texture> {
+  let p = prints.get(url);
+  if (!p) {
+    p = loader.loadAsync(url).then((t) => {
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = anisotropy;
+      return t;
+    });
+    // A failed fetch must not poison the cache, or the print can never recover.
+    p.catch(() => prints.delete(url));
+    prints.set(url, p);
+  }
+  return p;
+}
+
 function Print({ photo, x, h: H, shared, index }: { photo: Photo; x: number; h: number; shared: Shared; index: number }) {
-  const tex = useTexture(shared.lowRes ? photo.small : photo.src);
+  // Eleven placeholders are 1.3 KB in total and resolve in a single round trip, so the wall draws
+  // every print immediately instead of holding all of them behind 2 MB of photographs.
+  const tex = useTexture(photo.blur);
+  const [full, setFull] = useState<THREE.Texture | null>(null);
   const mesh = useRef<THREE.Mesh>(null);
   const w = (photo.width / photo.height) * H;
   const uniforms = useMemo(
     () => ({
       uMap: { value: tex },
+      uMapHi: { value: tex },
+      uSwap: { value: 0 },
       uTime: { value: index * 7.3 },
       uWind: { value: 0.25 },
       uBend: { value: 0 },
@@ -130,11 +163,32 @@ function Print({ photo, x, h: H, shared, index }: { photo: Photo; x: number; h: 
   const hit = useMemo(() => ({ ray: new THREE.Raycaster(), ndc: new THREE.Vector2(), uv: new THREE.Vector2(-10, -10) }), []);
 
   // Runs during render, before the texture is ever uploaded. Doing this in an effect and then
-  // setting needsUpdate re-uploaded all eleven 1800px images a frame after mount.
+  // setting needsUpdate re-uploaded all eleven images a frame after mount.
   useMemo(() => {
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = shared.hover ? 4 : 1;
-  }, [tex, shared.hover]);
+    // A 24px placeholder has nothing to mip and is only ever magnified.
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+  }, [tex]);
+
+  // The photograph, fetched outside Suspense so one slow print never holds up its neighbours. This
+  // is normally already resolved by the idle preload in PhotoWall by the time the wall is reached.
+  useEffect(() => {
+    let alive = true;
+    loadPrint(shared.lowRes ? photo.small : photo.src, shared.hover ? 4 : 1).then(
+      (t) => {
+        if (alive) setFull(t);
+      },
+      () => {},
+    );
+    return () => {
+      alive = false;
+    };
+  }, [photo.small, photo.src, shared.lowRes, shared.hover]);
+
+  useEffect(() => {
+    if (full) uniforms.uMapHi.value = full;
+  }, [full, uniforms]);
 
   useFrame((state, dt) => {
     const m = mesh.current;
@@ -148,6 +202,8 @@ function Print({ photo, x, h: H, shared, index }: { photo: Photo; x: number; h: 
     const sx = m.position.x - state.camera.position.x;
     const visible = Math.abs(sx) < (size.width / size.height) * 6;
     uniforms.uReveal.value += ((visible ? 1.9 : 0) - uniforms.uReveal.value) * (1 - Math.pow(0.02, dt));
+    // Dissolve the placeholder into the photograph once it has arrived.
+    uniforms.uSwap.value += ((full ? 1 : 0) - uniforms.uSwap.value) * (1 - Math.pow(0.004, dt));
     // Cursor → uv on this print. Skipped entirely on touch: it is eleven mesh raycasts per frame
     // for an effect a finger cannot produce, and shared.mouse would stay parked under the last tap.
     if (shared.hover) {
@@ -289,6 +345,23 @@ export function PhotoWall({ photos }: Props) {
     io.observe(el);
     return () => io.disconnect();
   }, []);
+
+  // Fetch the photographs during idle time once the preloader has handed off, so arriving at the
+  // wall does not *start* a 2 MB download five chapters after the page was opened. This is only the
+  // network and the decode: the textures reach the GPU when the canvas first renders them, so the
+  // wall still costs no VRAM until it is armed, and the model has already loaded by `ready`.
+  useEffect(() => {
+    if (!ready) return;
+    const urls = photos.map((p) => (coarse ? p.small : p.src));
+    const warm = () => urls.forEach((u) => void loadPrint(u, coarse ? 1 : 4).catch(() => {}));
+    // `"requestIdleCallback" in window` would narrow `window` itself to never in the fallback below.
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(warm, { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(warm, 1200);
+    return () => window.clearTimeout(id);
+  }, [ready, photos, coarse]);
   const [aspect, setAspect] = useState(16 / 9);
   const total = useMemo(() => wallMetrics(aspect, photos).total, [aspect, photos]);
 
